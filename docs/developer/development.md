@@ -11,7 +11,7 @@
 ## 开发环境
 
 - Rust：稳定版 toolchain
-- 平台：当前以 macOS 为主
+- 平台：macOS 与 Linux
 
 ```bash
 git clone https://github.com/duoyuli/arc-kit.git
@@ -19,6 +19,8 @@ cd arc-kit
 cargo check
 cargo test
 ```
+
+CI 会在 macOS 与 Linux 上执行同一套检查。发版 workflow 会产出 Darwin 与 Linux GNU 压缩包，并自动生成同时支持 Homebrew 与 Linuxbrew 的 formula。
 
 ## 提交前检查
 
@@ -54,6 +56,13 @@ cargo run -p arc-cli -- status --format json
 - `skill info` 的结构化 JSON 错误
 - `mcp` / `subagent` 命令已移除
 - `[mcps]` 等移除后的 `arc.toml` section 会被拒绝
+
+macOS 与 Linux 支持变更必须至少通过对应平台的 CI。涉及 release 的改动还要确认 `.github/workflows/release.yml` 中的目标产物仍包含：
+
+- `aarch64-apple-darwin`
+- `x86_64-apple-darwin`
+- `x86_64-unknown-linux-gnu`
+- `aarch64-unknown-linux-gnu`
 
 ## 仓库结构
 

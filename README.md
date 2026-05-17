@@ -14,6 +14,8 @@
 
 **arc-kit 用同一套 CLI 管理 provider、skill、market 和项目级 skill 落地。**
 
+当前支持平台：macOS 与 Linux。各 agent 的配置目录在两个平台保持一致。
+
 ## 核心能力
 
 **1. Provider 统一管理**
@@ -83,12 +85,27 @@
 
 ## 安装与使用
 
-### Homebrew（推荐）
+### Homebrew / Linuxbrew
 
 ```bash
 brew tap duoyuli/arc-kit https://github.com/duoyuli/arc-kit.git
 brew install arc-kit
 ```
+
+Linuxbrew 安装需要使用包含 Linux artifact 的 release；旧版 formula 会拒绝在 Linux 上安装，避免误下载 macOS 包。
+
+### Linux
+
+也可以从 GitHub Release 下载对应架构的压缩包，解压后把 `arc` 放到 `PATH` 中：
+
+```bash
+curl -L -o arc-kit-linux.tar.gz https://github.com/duoyuli/arc-kit/releases/latest/download/arc-kit-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf arc-kit-linux.tar.gz
+install -m 0755 arc ~/.local/bin/arc
+arc version
+```
+
+aarch64 Linux 使用 `arc-kit-aarch64-unknown-linux-gnu.tar.gz`。
 
 ### 命令总览
 

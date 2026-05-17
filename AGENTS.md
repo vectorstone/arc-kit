@@ -3,7 +3,7 @@
 ## 项目
 
 - `arc-kit` 是一个 Rust CLI，用于管理 coding agent 的 provider、skill、MCP、subagent 和 market。
-- 目标平台仅为 macOS。
+- 目标平台为 macOS 与 Linux。
 - Cargo workspace 主要分为：
   - `arc-cli`：CLI、命令定义、用户输出
   - `arc-core`：领域逻辑、状态与文件系统操作

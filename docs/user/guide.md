@@ -12,14 +12,29 @@
 
 > MCP 与 subagent 管理功能已移除；相关命令和 `arc.toml` section 不再可用。
 
-当前目标平台：`macOS`。
+当前目标平台：`macOS` 与 `Linux`。各 agent 的配置目录在两个平台保持一致。
 
 ## 2. 五分钟上手
+
+macOS 使用 Homebrew 安装；Linuxbrew 从包含 Linux artifact 的 release 起可用：
 
 ```bash
 brew tap duoyuli/arc-kit https://github.com/duoyuli/arc-kit.git
 brew install arc-kit
 ```
+
+旧版 formula 会拒绝在 Linux 上安装，避免误下载 macOS 包。
+
+Linux 也可以从 GitHub Release 下载对应架构的压缩包，解压后把 `arc` 放到 `PATH` 中：
+
+```bash
+curl -L -o arc-kit-linux.tar.gz https://github.com/duoyuli/arc-kit/releases/latest/download/arc-kit-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf arc-kit-linux.tar.gz
+install -m 0755 arc ~/.local/bin/arc
+arc version
+```
+
+aarch64 Linux 使用 `arc-kit-aarch64-unknown-linux-gnu.tar.gz`。
 
 验证环境：
 

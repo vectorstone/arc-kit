@@ -1,3 +1,4 @@
+use std::cmp::Reverse;
 use std::io;
 
 use console::{Key, Term, style, truncate_str};
@@ -106,7 +107,7 @@ fn fuzzy_select_engine_at(
                 .enumerate()
                 .filter_map(|(i, corpus)| matcher.fuzzy_match(corpus, &search).map(|s| (i, s)))
                 .collect();
-            scored.sort_unstable_by(|a, b| b.1.cmp(&a.1));
+            scored.sort_unstable_by_key(|(_, score)| Reverse(*score));
             scored.into_iter().map(|(i, _)| i).collect()
         };
 

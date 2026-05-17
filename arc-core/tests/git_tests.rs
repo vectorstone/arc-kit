@@ -47,10 +47,8 @@ fn remote_default_branch_and_pull_support_master() {
     assert_eq!(repo.remote_default_branch("origin").unwrap(), "master");
     repo.pull_default_branch("origin").unwrap();
 
-    assert_eq!(
-        std::fs::read_to_string(checkout.join("README.md")).unwrap(),
-        "v2\n"
-    );
+    let readme = std::fs::read_to_string(checkout.join("README.md")).unwrap();
+    assert_eq!(readme.replace("\r\n", "\n"), "v2\n");
 }
 
 fn run_git(args: &[&str], cwd: &Path) {

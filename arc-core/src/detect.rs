@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
@@ -179,13 +179,40 @@ fn detect_executable(spec: &AgentSpec) -> (Option<String>, Option<String>) {
 }
 
 fn resolve_executable_path(name: &str) -> Option<String> {
-    Command::new("which")
-        .arg(name)
-        .output()
-        .ok()
-        .filter(|out| out.status.success())
-        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
-        .filter(|value| !value.is_empty())
+    resolve_executable_path_in(name, std::env::var_os("PATH"))
+}
+
+fn resolve_executable_path_in(name: &str, path_var: Option<std::ffi::OsString>) -> Option<String> {
+    let raw = Path::new(name);
+    if raw.components().count() > 1 {
+        return is_executable_file(raw).then(|| raw.display().to_string());
+    }
+
+    path_var
+        .into_iter()
+        .flat_map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
+        .map(|dir| dir.join(name))
+        .find(|candidate| is_executable_file(candidate))
+        .map(|candidate| candidate.display().to_string())
+}
+
+fn is_executable_file(path: &Path) -> bool {
+    let Ok(metadata) = path.metadata() else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        metadata.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
 }
 
 fn command_output_with_timeout(executable: &str, arg: &str, timeout: Duration) -> Option<Output> {
@@ -262,18 +289,40 @@ mod tests {
     }
 
     #[test]
+    fn resolve_executable_path_finds_executable_on_path() {
+        let temp = tempfile::tempdir().unwrap();
+        let bin = temp.path().join("arc-detect-test-bin");
+        std::fs::write(&bin, "#!/bin/sh\nexit 0\n").unwrap();
+        make_executable(&bin);
+
+        let found = resolve_executable_path_in(
+            "arc-detect-test-bin",
+            Some(temp.path().as_os_str().to_os_string()),
+        );
+
+        assert_eq!(found, Some(bin.display().to_string()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_executable_path_ignores_non_executable_files() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(temp.path().join("not-executable"), "#!/bin/sh\nexit 0\n").unwrap();
+
+        let found = resolve_executable_path_in(
+            "not-executable",
+            Some(temp.path().as_os_str().to_os_string()),
+        );
+
+        assert_eq!(found, None);
+    }
+
+    #[test]
     fn command_output_with_timeout_returns_none_for_hanging_command() {
         let temp = tempfile::tempdir().unwrap();
         let script = temp.path().join("hang.sh");
         std::fs::write(&script, "#!/bin/sh\nsleep 5\n").unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-
-            let mut perms = std::fs::metadata(&script).unwrap().permissions();
-            perms.set_mode(0o755);
-            std::fs::set_permissions(&script, perms).unwrap();
-        }
+        make_executable(&script);
 
         let output = command_output_with_timeout(
             script.to_str().unwrap(),
@@ -281,5 +330,16 @@ mod tests {
             Duration::from_millis(100),
         );
         assert!(output.is_none());
+    }
+
+    fn make_executable(path: &Path) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            let mut perms = std::fs::metadata(path).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(path, perms).unwrap();
+        }
     }
 }

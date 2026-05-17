@@ -136,19 +136,15 @@ pub fn run_project_requirements_editor_with_defaults(
                 term.show_cursor()?;
                 return Ok(Some(collect_selection(&items, &checked)));
             }
-            Key::ArrowUp => {
-                if !filtered.is_empty() {
-                    row = if row == 0 {
-                        filtered.len() - 1
-                    } else {
-                        row - 1
-                    };
-                }
+            Key::ArrowUp if !filtered.is_empty() => {
+                row = if row == 0 {
+                    filtered.len() - 1
+                } else {
+                    row - 1
+                };
             }
-            Key::ArrowDown => {
-                if !filtered.is_empty() {
-                    row = (row + 1) % filtered.len();
-                }
+            Key::ArrowDown if !filtered.is_empty() => {
+                row = (row + 1) % filtered.len();
             }
             Key::Char(' ') => {
                 if let Some(&item_idx) = filtered.get(row) {
