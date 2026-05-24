@@ -94,7 +94,7 @@ require_exit_code() {
 require_stdout() {
   local pattern="$1"
   local context="$2"
-  if ! rg -q "$pattern" "$TMP_STDOUT"; then
+  if ! grep -Eq "$pattern" "$TMP_STDOUT"; then
     echo "Missing stdout pattern '$pattern' for: $context" >&2
     cat "$TMP_STDOUT" >&2 || true
     exit 1
@@ -104,7 +104,7 @@ require_stdout() {
 require_stderr() {
   local pattern="$1"
   local context="$2"
-  if ! rg -q "$pattern" "$TMP_STDERR"; then
+  if ! grep -Eq "$pattern" "$TMP_STDERR"; then
     echo "Missing stderr pattern '$pattern' for: $context" >&2
     cat "$TMP_STDERR" >&2 || true
     exit 1
