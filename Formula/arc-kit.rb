@@ -2,29 +2,29 @@ class ArcKit < Formula
   desc "CLI tool for managing coding agent providers, skills, and markets"
   homepage "https://github.com/vectorstone/arc-kit"
   license "MIT"
-  version "2026.5.24"
+  version "2026.5.24.2"
 
   on_macos do
     on_arm do
-      url "https://github.com/vectorstone/arc-kit/releases/download/v2026.5.24/arc-kit-aarch64-apple-darwin.tar.gz"
-      sha256 "9bbb81c0062d9d22a4f19d898be4a8dd9ac0e72692715aee14c9e612e0668387"
+      url "https://github.com/vectorstone/arc-kit/releases/download/v2026.5.24.2/arc-kit-aarch64-apple-darwin.tar.gz"
+      sha256 "37ad88be476b81de4ea8689a1ba159fc19e11476f658eb216b7a8919c933ad45"
     end
 
     on_intel do
-      url "https://github.com/vectorstone/arc-kit/releases/download/v2026.5.24/arc-kit-x86_64-apple-darwin.tar.gz"
-      sha256 "76b04996b8f96d276d6c9b26e1b30853887083bddc55d28f8ee3e5ac40414653"
+      url "https://github.com/vectorstone/arc-kit/releases/download/v2026.5.24.2/arc-kit-x86_64-apple-darwin.tar.gz"
+      sha256 "36791f6ea6a2183d4a2907c976f016f3dee47d9d58d3b28f027a28f9cc749d39"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/vectorstone/arc-kit/releases/download/v2026.5.24/arc-kit-aarch64-unknown-linux-gnu.tar.gz"
-      sha256 "cf773960fa98ba4ef07c57d6cd9e8c2325aea519864adab11ad393ef1bdf2a73"
+      url "https://github.com/vectorstone/arc-kit/releases/download/v2026.5.24.2/arc-kit-aarch64-unknown-linux-gnu.tar.gz"
+      sha256 "7c5ae7aeb23ee1875ca55e53209e96f4dd44126ccedfdcc4a691153f58749015"
     end
 
     on_intel do
-      url "https://github.com/vectorstone/arc-kit/releases/download/v2026.5.24/arc-kit-x86_64-unknown-linux-gnu.tar.gz"
-      sha256 "baf669ad1ce797879be59a8281b744855c482bc5372f0e8fbceb98a083f541f6"
+      url "https://github.com/vectorstone/arc-kit/releases/download/v2026.5.24.2/arc-kit-x86_64-unknown-linux-gnu.tar.gz"
+      sha256 "a585e478bd9d6ce519ec4d674bb90754ecb4914b8d5a0023f0d092871097b363"
     end
   end
 
