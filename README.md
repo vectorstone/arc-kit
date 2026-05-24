@@ -87,25 +87,99 @@
 
 ### Homebrew / Linuxbrew
 
+macOS 或已安装 Linuxbrew 的 Linux 可以直接安装：
+
 ```bash
 brew tap vectorstone/arc-kit https://github.com/vectorstone/arc-kit.git
 brew install arc-kit
+arc version
 ```
 
-Linuxbrew 安装需要使用包含 Linux artifact 的 release；旧版 formula 会拒绝在 Linux 上安装，避免误下载 macOS 包。
+Linuxbrew 需要 `v2026.5.24` 或更新版本的 release；旧版 formula 会拒绝在 Linux 上安装，避免误下载 macOS 包。
 
-### Linux
+### Linux / Arch Linux
 
-也可以从 GitHub Release 下载对应架构的压缩包，解压后把 `arc` 放到 `PATH` 中：
+没有 Linuxbrew 时，推荐直接从 GitHub Release 下载对应架构的压缩包，解压后把 `arc` 放到 `PATH` 中。
+
+x86_64 Linux / Arch Linux：
 
 ```bash
+mkdir -p ~/.local/bin
 curl -L -o arc-kit-linux.tar.gz https://github.com/vectorstone/arc-kit/releases/latest/download/arc-kit-x86_64-unknown-linux-gnu.tar.gz
 tar -xzf arc-kit-linux.tar.gz
 install -m 0755 arc ~/.local/bin/arc
 arc version
 ```
 
-aarch64 Linux 使用 `arc-kit-aarch64-unknown-linux-gnu.tar.gz`。
+aarch64 Linux：
+
+```bash
+mkdir -p ~/.local/bin
+curl -L -o arc-kit-linux.tar.gz https://github.com/vectorstone/arc-kit/releases/latest/download/arc-kit-aarch64-unknown-linux-gnu.tar.gz
+tar -xzf arc-kit-linux.tar.gz
+install -m 0755 arc ~/.local/bin/arc
+arc version
+```
+
+如果 `~/.local/bin` 不在 `PATH` 中，需要加入 shell 配置：
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+### 从源码安装
+
+适合开发测试或 release 包不可用时使用：
+
+```bash
+git clone https://github.com/vectorstone/arc-kit.git
+cd arc-kit
+cargo build --release
+install -m 0755 target/release/arc ~/.local/bin/arc
+arc version
+```
+
+### 初始化与配置目录
+
+安装二进制本身不会创建配置目录；执行普通命令后会初始化状态目录：
+
+```bash
+arc status
+arc provider list
+```
+
+默认配置目录为：
+
+```text
+~/.arc-cli/
+├── providers/   # provider profile 与 active 记录
+├── skills/      # 本地 skill
+├── markets/     # market checkout 与 catalog
+└── state/       # arc 追踪状态
+```
+
+Provider 默认配置会在 `arc provider list`、`arc provider use` 或 `arc project apply` 时按已检测到的 agent 写入：
+
+```text
+~/.arc-cli/providers/claude.toml
+~/.arc-cli/providers/codex.toml
+~/.arc-cli/providers/active.toml
+```
+
+检测依赖对应 agent 的可执行文件在 `PATH` 中，例如：
+
+```bash
+command -v claude
+command -v codex
+arc status --format json
+```
+
+如果希望把 arc-kit 状态放到其他目录，可设置：
+
+```bash
+export ARC_KIT_HOME="$HOME/.arc-kit"
+arc status
+```
 
 ### 命令总览
 
