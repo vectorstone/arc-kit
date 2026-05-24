@@ -20,7 +20,7 @@
 
 **1. Provider 统一管理**
 
-执行 `arc provider use <name> [--agent <agent>]` 可切换 provider profile。交互式模式按 coding agent 分 tab 展示，一次只看一个 agent 的 provider，支持方向键与 `h/j/k/l` 导航、`q` 退出。若需在项目内固定 provider，可在 `arc.toml` 中声明 `[provider]` 后执行 `arc project apply`。
+执行 `arc provider use <name> [--agent <agent>]` 可切换 provider profile。交互式模式按 coding agent 分 tab 展示，一次只看一个 agent 的 provider，支持方向键与 `h/j/k/l` 导航、`q` 退出；选择界面写入 `stderr`，最终结果写入 `stdout`。若需在项目内固定 provider，可在 `arc.toml` 中声明 `[provider]` 后执行 `arc project apply`。
 
 **2. Skill 一处管理，多处使用**
 

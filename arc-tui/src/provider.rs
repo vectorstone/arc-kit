@@ -1,9 +1,12 @@
 use std::collections::HashMap;
+use std::fs::File;
 use std::io;
+use std::io::IsTerminal;
+use std::os::fd::{AsRawFd, RawFd};
 
 use arc_core::agent::agent_spec;
 use arc_core::provider::{ProviderInfo, supported_provider_agents};
-use console::{Alignment, Key, Term, measure_text_width, pad_str, style, truncate_str};
+use console::{Alignment, Key, measure_text_width, pad_str, style, truncate_str};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ProviderTab {
@@ -15,20 +18,59 @@ struct ProviderTab {
     default_row: usize,
 }
 
-struct CursorGuard<'a> {
-    term: &'a Term,
-}
+struct CursorGuard;
 
-impl Drop for CursorGuard<'_> {
+impl Drop for CursorGuard {
     fn drop(&mut self) {
-        let _ = self.term.show_cursor();
+        let _ = show_cursor();
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ProviderUiStream {
-    Stdout,
-    Stderr,
+struct RawTtyGuard {
+    fd: RawFd,
+    _tty: Option<File>,
+    original: libc::termios,
+}
+
+impl RawTtyGuard {
+    fn new() -> io::Result<Self> {
+        let stdin = io::stdin();
+        let (fd, tty) = if stdin.is_terminal() {
+            (stdin.as_raw_fd(), None)
+        } else {
+            let tty = File::options().read(true).write(true).open("/dev/tty")?;
+            let fd = tty.as_raw_fd();
+            (fd, Some(tty))
+        };
+        let original = get_termios(fd)?;
+        let mut raw = make_provider_raw(original);
+        raw.c_cc[libc::VMIN] = 1;
+        raw.c_cc[libc::VTIME] = 0;
+        set_termios_now(fd, &raw)?;
+        Ok(Self {
+            fd,
+            _tty: tty,
+            original,
+        })
+    }
+
+    fn fd(&self) -> RawFd {
+        self.fd
+    }
+}
+
+impl Drop for RawTtyGuard {
+    fn drop(&mut self) {
+        let _ = set_termios_now(self.fd, &self.original);
+    }
+}
+
+fn make_provider_raw(original: libc::termios) -> libc::termios {
+    let mut raw = original;
+    raw.c_lflag &= !(libc::ECHO | libc::ICANON | libc::IEXTEN | libc::ISIG);
+    raw.c_cc[libc::VMIN] = 1;
+    raw.c_cc[libc::VTIME] = 0;
+    raw
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,31 +93,27 @@ pub fn select_provider(
         return Ok(None);
     }
 
-    let term = match provider_ui_stream(Term::stdout().is_term(), Term::stderr().is_term()) {
-        ProviderUiStream::Stdout => Term::stdout(),
-        ProviderUiStream::Stderr => Term::stderr(),
-    };
     let mut tab = default_tab_index(&tabs);
     let mut rows: Vec<usize> = tabs.iter().map(|tab| tab.default_row).collect();
     let mut scrolls = vec![0usize; tabs.len()];
     let mut prev_drawn = 0usize;
 
-    term.hide_cursor()?;
-    let _cursor_guard = CursorGuard { term: &term };
+    hide_cursor()?;
+    let _cursor_guard = CursorGuard;
 
     loop {
-        let (term_rows, cols) = term.size();
+        let (term_rows, cols) = terminal_size();
         let visible_rows = (term_rows as usize).saturating_sub(4).clamp(1, 12);
         let max_line_width = (cols as usize).saturating_sub(1).max(1);
 
         if prev_drawn > 0 {
-            clear_drawn_block(&term, prev_drawn)?;
+            clear_drawn_block(prev_drawn)?;
         }
 
         let current_tab = &tabs[tab];
         let current_rows = current_tab.provider_indexes.len();
         if current_rows == 0 {
-            term.show_cursor()?;
+            show_cursor()?;
             return Ok(None);
         }
 
@@ -88,12 +126,8 @@ pub fn select_provider(
         }
         scrolls[tab] = scroll;
 
-        write_clamped_line(
-            &term,
-            format!("  {}", style("Provider").bold()),
-            max_line_width,
-        )?;
-        write_clamped_line(&term, render_tab_line(&tabs, tab), max_line_width)?;
+        write_clamped_line(format!("  {}", style("Provider").bold()), max_line_width)?;
+        write_clamped_line(render_tab_line(&tabs, tab), max_line_width)?;
 
         let shown = current_rows.saturating_sub(scroll).min(visible_rows);
         for (pos, &provider_idx) in current_tab
@@ -109,31 +143,29 @@ pub fn select_provider(
                 .get(&current_tab.agent)
                 .is_some_and(|name| name == &provider.name);
             write_clamped_line(
-                &term,
                 render_provider_line(provider, current_tab.name_width, is_active, is_selected),
                 max_line_width,
             )?;
         }
 
         write_clamped_line(
-            &term,
             render_hint_line(current_tab, current_rows, tabs.len() > 1),
             max_line_width,
         )?;
 
         prev_drawn = shown + 3;
-        term.flush()?;
-
-        match map_provider_key(term.read_key()?) {
+        flush_stderr()?;
+        let key = read_provider_key()?;
+        match map_provider_key(key) {
             ProviderKeyAction::Cancel => {
-                clear_drawn_block(&term, prev_drawn)?;
-                term.show_cursor()?;
+                clear_drawn_block(prev_drawn)?;
+                show_cursor()?;
                 return Ok(None);
             }
             ProviderKeyAction::Confirm => {
                 let provider_idx = current_tab.provider_indexes[rows[tab]];
-                clear_drawn_block(&term, prev_drawn)?;
-                term.show_cursor()?;
+                clear_drawn_block(prev_drawn)?;
+                show_cursor()?;
                 return Ok(Some(providers[provider_idx].clone()));
             }
             ProviderKeyAction::PrevRow => {
@@ -157,6 +189,119 @@ pub fn select_provider(
     }
 }
 
+fn read_provider_key() -> io::Result<Key> {
+    let tty = RawTtyGuard::new()?;
+    read_tty_key(tty.fd())
+}
+
+fn get_termios(fd: libc::c_int) -> io::Result<libc::termios> {
+    let mut termios = std::mem::MaybeUninit::uninit();
+    let result = unsafe { libc::tcgetattr(fd, termios.as_mut_ptr()) };
+    if result == 0 {
+        Ok(unsafe { termios.assume_init() })
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+fn set_termios_now(fd: libc::c_int, termios: &libc::termios) -> io::Result<()> {
+    set_termios(fd, libc::TCSANOW, termios)
+}
+
+fn set_termios(fd: libc::c_int, action: libc::c_int, termios: &libc::termios) -> io::Result<()> {
+    let result = unsafe { libc::tcsetattr(fd, action, termios) };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+fn read_tty_key(fd: RawFd) -> io::Result<Key> {
+    let byte = read_byte(fd)?;
+    match byte {
+        b'\x1b' => read_escape_key(fd),
+        b'\n' | b'\r' => Ok(Key::Enter),
+        b'\x7f' => Ok(Key::Backspace),
+        b'\t' => Ok(Key::Tab),
+        byte if byte.is_ascii() => Ok(Key::Char(byte as char)),
+        first => read_utf8_key(fd, first),
+    }
+}
+
+fn read_escape_key(fd: RawFd) -> io::Result<Key> {
+    let mut seq = [0u8; 2];
+    if read_fd(fd, &mut seq[..1])? == 0 {
+        return Ok(Key::Escape);
+    }
+    if seq[0] != b'[' {
+        return Ok(Key::Escape);
+    }
+    if read_fd(fd, &mut seq[1..2])? == 0 {
+        return Ok(Key::Escape);
+    }
+    match seq[1] {
+        b'A' => Ok(Key::ArrowUp),
+        b'B' => Ok(Key::ArrowDown),
+        b'C' => Ok(Key::ArrowRight),
+        b'D' => Ok(Key::ArrowLeft),
+        b'Z' => Ok(Key::BackTab),
+        _ => Ok(Key::Escape),
+    }
+}
+
+fn read_utf8_key(fd: RawFd, first: u8) -> io::Result<Key> {
+    let len = if first & 0b1110_0000 == 0b1100_0000 {
+        2
+    } else if first & 0b1111_0000 == 0b1110_0000 {
+        3
+    } else if first & 0b1111_1000 == 0b1111_0000 {
+        4
+    } else {
+        return Ok(Key::Unknown);
+    };
+    let mut buf = [0u8; 4];
+    buf[0] = first;
+    read_fd_exact(fd, &mut buf[1..len])?;
+    match std::str::from_utf8(&buf[..len]) {
+        Ok(value) => Ok(value.chars().next().map(Key::Char).unwrap_or(Key::Unknown)),
+        Err(_) => Ok(Key::Unknown),
+    }
+}
+
+fn read_byte(fd: RawFd) -> io::Result<u8> {
+    let mut buf = [0u8; 1];
+    read_fd_exact(fd, &mut buf)?;
+    Ok(buf[0])
+}
+
+fn read_fd_exact(fd: RawFd, mut buf: &mut [u8]) -> io::Result<()> {
+    while !buf.is_empty() {
+        let read = read_fd(fd, buf)?;
+        if read == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "terminal input closed",
+            ));
+        }
+        buf = &mut buf[read..];
+    }
+    Ok(())
+}
+
+fn read_fd(fd: RawFd, buf: &mut [u8]) -> io::Result<usize> {
+    loop {
+        let read = unsafe { libc::read(fd, buf.as_mut_ptr().cast(), buf.len()) };
+        if read >= 0 {
+            return Ok(read as usize);
+        }
+        let err = io::Error::last_os_error();
+        if err.kind() != io::ErrorKind::Interrupted {
+            return Err(err);
+        }
+    }
+}
+
 fn map_provider_key(key: Key) -> ProviderKeyAction {
     match key {
         Key::Escape | Key::Char('q') | Key::Char('Q') => ProviderKeyAction::Cancel,
@@ -168,14 +313,6 @@ fn map_provider_key(key: Key) -> ProviderKeyAction {
         }
         Key::ArrowRight | Key::Tab | Key::Char('l') | Key::Char('L') => ProviderKeyAction::NextTab,
         _ => ProviderKeyAction::Noop,
-    }
-}
-
-fn provider_ui_stream(stdout_is_tty: bool, stderr_is_tty: bool) -> ProviderUiStream {
-    if stdout_is_tty || !stderr_is_tty {
-        ProviderUiStream::Stdout
-    } else {
-        ProviderUiStream::Stderr
     }
 }
 
@@ -311,18 +448,46 @@ fn clamp_line_width(line: &str, max_width: usize) -> String {
     truncate_str(line, max_width, truncation_tail(max_width)).into_owned()
 }
 
-fn write_clamped_line(term: &Term, line: String, max_width: usize) -> io::Result<()> {
-    term.write_line(&clamp_line_width(&line, max_width))
+fn terminal_size() -> (u16, u16) {
+    let mut size = std::mem::MaybeUninit::<libc::winsize>::uninit();
+    let result = unsafe { libc::ioctl(2, libc::TIOCGWINSZ, size.as_mut_ptr()) };
+    if result == 0 {
+        let size = unsafe { size.assume_init() };
+        if size.ws_row > 0 && size.ws_col > 0 {
+            return (size.ws_row, size.ws_col);
+        }
+    }
+    (24, 80)
 }
 
-fn clear_drawn_block(term: &Term, lines: usize) -> io::Result<()> {
-    term.move_cursor_up(lines)?;
-    for _ in 0..lines {
-        term.clear_line()?;
-        term.move_cursor_down(1)?;
-    }
-    term.move_cursor_up(lines)?;
+fn write_clamped_line(line: String, max_width: usize) -> io::Result<()> {
+    eprintln!("{}", clamp_line_width(&line, max_width));
     Ok(())
+}
+
+fn clear_drawn_block(lines: usize) -> io::Result<()> {
+    eprint!("\x1b[{lines}A");
+    for _ in 0..lines {
+        eprint!("\r\x1b[2K\x1b[1B");
+    }
+    eprint!("\x1b[{lines}A");
+    flush_stderr()
+}
+
+fn hide_cursor() -> io::Result<()> {
+    eprint!("\x1b[?25l");
+    flush_stderr()
+}
+
+fn show_cursor() -> io::Result<()> {
+    eprint!("\x1b[?25h");
+    flush_stderr()
+}
+
+fn flush_stderr() -> io::Result<()> {
+    use std::io::Write;
+
+    io::stderr().flush()
 }
 
 #[cfg(test)]
@@ -335,9 +500,8 @@ mod tests {
     use console::{Key, measure_text_width};
 
     use super::{
-        ProviderKeyAction, ProviderUiStream, build_provider_tabs, clamp_line_width,
-        default_tab_index, map_provider_key, provider_ui_stream, render_provider_line,
-        render_tab_line,
+        ProviderKeyAction, build_provider_tabs, clamp_line_width, default_tab_index,
+        map_provider_key, render_provider_line, render_tab_line,
     };
 
     fn provider(agent: &str, name: &str, display_name: &str, description: &str) -> ProviderInfo {
@@ -385,18 +549,6 @@ mod tests {
 
         assert_eq!(tabs[1].default_row, 0);
         assert_eq!(default_tab_index(&tabs), 1);
-    }
-
-    #[test]
-    fn provider_ui_prefers_stdout_when_available() {
-        assert_eq!(provider_ui_stream(true, true), ProviderUiStream::Stdout);
-        assert_eq!(provider_ui_stream(true, false), ProviderUiStream::Stdout);
-    }
-
-    #[test]
-    fn provider_ui_falls_back_to_stderr_only_when_stdout_is_not_tty() {
-        assert_eq!(provider_ui_stream(false, true), ProviderUiStream::Stderr);
-        assert_eq!(provider_ui_stream(false, false), ProviderUiStream::Stdout);
     }
 
     #[test]

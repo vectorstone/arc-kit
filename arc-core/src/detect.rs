@@ -218,6 +218,7 @@ fn is_executable_file(path: &Path) -> bool {
 fn command_output_with_timeout(executable: &str, arg: &str, timeout: Duration) -> Option<Output> {
     let mut child = Command::new(executable)
         .arg(arg)
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()

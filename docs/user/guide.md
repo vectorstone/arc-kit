@@ -120,6 +120,7 @@ arc provider test
 - `arc provider` 等同于 `arc provider list`
 - 非交互式下，`use` 必须显式写 provider 名
 - 如果同名 provider 出现在多个 agent，需要加 `--agent`
+- 交互式选择界面写入 `stderr`，最终切换结果写入 `stdout`
 - `provider test` 只要有一项失败，退出码就是 `1`
 
 Provider 配置文件在：
