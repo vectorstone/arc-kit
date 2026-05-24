@@ -88,7 +88,7 @@
 ### Homebrew / Linuxbrew
 
 ```bash
-brew tap duoyuli/arc-kit https://github.com/duoyuli/arc-kit.git
+brew tap vectorstone/arc-kit https://github.com/vectorstone/arc-kit.git
 brew install arc-kit
 ```
 
@@ -99,7 +99,7 @@ Linuxbrew 安装需要使用包含 Linux artifact 的 release；旧版 formula �
 也可以从 GitHub Release 下载对应架构的压缩包，解压后把 `arc` 放到 `PATH` 中：
 
 ```bash
-curl -L -o arc-kit-linux.tar.gz https://github.com/duoyuli/arc-kit/releases/latest/download/arc-kit-x86_64-unknown-linux-gnu.tar.gz
+curl -L -o arc-kit-linux.tar.gz https://github.com/vectorstone/arc-kit/releases/latest/download/arc-kit-x86_64-unknown-linux-gnu.tar.gz
 tar -xzf arc-kit-linux.tar.gz
 install -m 0755 arc ~/.local/bin/arc
 arc version

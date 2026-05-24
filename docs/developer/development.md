@@ -14,7 +14,7 @@
 - 平台：macOS 与 Linux
 
 ```bash
-git clone https://github.com/duoyuli/arc-kit.git
+git clone https://github.com/vectorstone/arc-kit.git
 cd arc-kit
 cargo check
 cargo test
