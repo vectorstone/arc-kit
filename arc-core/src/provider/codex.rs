@@ -37,6 +37,13 @@ pub fn parse_provider_config(section: &toml::Table) -> ProviderSettings {
             .and_then(toml::Value::as_str)
             .filter(|v| !v.is_empty())
             .map(str::to_string),
+        extra_config: section
+            .iter()
+            .filter(|(key, value)| {
+                !is_reserved_provider_key(key) && !matches!(value, toml::Value::Table(_))
+            })
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect(),
     })
 }
 
@@ -70,7 +77,7 @@ pub fn apply_provider(
 
         let target_snapshot = resolve_target_auth_snapshot(paths, new)?;
         write_auth_config(paths, config, new_mode, target_snapshot.as_deref())?;
-        write_main_config(paths, new, config)?;
+        write_main_config(paths, old, new, config)?;
         Ok(())
     })();
 
@@ -301,11 +308,24 @@ fn rollback_file_states(states: &[FileState]) -> Result<()> {
 
 fn write_main_config(
     paths: &ArcPaths,
+    old: Option<&ProviderInfo>,
     provider: &ProviderInfo,
     config: &CodexProviderConfig,
 ) -> Result<()> {
     let config_path = paths.user_home().join(".codex").join("config.toml");
     let mut config_table = read_toml_table(&config_path);
+
+    if let Some(old_config) = old.and_then(codex_provider_config) {
+        for key in old_config.extra_config.keys() {
+            if !config.extra_config.contains_key(key) {
+                config_table.remove(key);
+            }
+        }
+    }
+
+    for (key, value) in &config.extra_config {
+        config_table.insert(key.clone(), value.clone());
+    }
 
     if let Some(base_url) = &config.base_url {
         config_table.insert(
@@ -353,5 +373,16 @@ fn rollback_file_state(path: &std::path::Path, previous: Option<&str>) -> Result
             }
             Ok(())
         }
+    }
+}
+
+fn is_reserved_provider_key(key: &str) -> bool {
+    matches!(key, "display_name" | "description" | "api_key" | "base_url")
+}
+
+fn codex_provider_config(provider: &ProviderInfo) -> Option<&CodexProviderConfig> {
+    match &provider.settings {
+        ProviderSettings::Codex(config) => Some(config),
+        ProviderSettings::Claude(_) => None,
     }
 }

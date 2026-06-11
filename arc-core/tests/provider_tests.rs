@@ -126,6 +126,7 @@ fn provider_switch_writes_codex_proxy_auth_with_only_api_key() {
         settings: ProviderSettings::Codex(CodexProviderConfig {
             base_url: Some("https://example.com".to_string()),
             api_key: Some("sk-test".to_string()),
+            extra_config: BTreeMap::new(),
         }),
     };
 
@@ -177,38 +178,56 @@ fn provider_switch_writes_codex_base_url() {
         settings: ProviderSettings::Codex(CodexProviderConfig {
             api_key: Some("sk-test".to_string()),
             base_url: Some("https://example.com/codex".to_string()),
+            extra_config: BTreeMap::from([
+                (
+                    "model".to_string(),
+                    toml::Value::String("MiniMax-M3".to_string()),
+                ),
+                (
+                    "model_context_window".to_string(),
+                    toml::Value::Integer(512_000),
+                ),
+                (
+                    "wire_api".to_string(),
+                    toml::Value::String("responses".to_string()),
+                ),
+            ]),
         }),
     };
 
     apply_provider(&paths, &provider).unwrap();
     let config_path = temp.path().join(".codex").join("config.toml");
     let content = fs::read_to_string(config_path).unwrap();
+    assert!(content.contains("model = \"MiniMax-M3\""));
+    assert!(content.contains("model_context_window = 512000"));
     assert!(content.contains("model_provider = \"proxy\""));
     assert!(content.contains("[model_providers.proxy]"));
     assert!(content.contains("name = \"My Proxy\""));
     assert!(content.contains("base_url = \"https://example.com/codex\""));
-    assert!(!content.contains("wire_api"));
+    assert!(content.contains("wire_api = \"responses\""));
 }
 
 #[test]
 fn provider_switch_clears_codex_model_provider_for_official() {
     let temp = tempfile::tempdir().unwrap();
     let paths = ArcPaths::with_user_home(temp.path());
+    let providers_dir = paths.providers_dir();
     let codex_dir = temp.path().join(".codex");
+    fs::create_dir_all(&providers_dir).unwrap();
     fs::create_dir_all(&codex_dir).unwrap();
     fs::write(
+        providers_dir.join("codex.toml"),
+        "[proxy]\ndisplay_name = \"Proxy\"\napi_key = \"sk-proxy\"\nbase_url = \"https://old.example.com\"\nmodel = \"MiniMax-M3\"\nmodel_context_window = 512000\nwire_api = \"responses\"\n\n[official]\ndisplay_name = \"Official\"\n",
+    )
+    .unwrap();
+    write_active_provider(&providers_dir, "codex", "proxy").unwrap();
+    fs::write(
         codex_dir.join("config.toml"),
-        "model = \"gpt-5.4\"\nmodel_provider = \"proxy\"\n[model_providers.proxy]\nname = \"proxy\"\nbase_url = \"https://old.example.com\"\n",
+        "model = \"MiniMax-M3\"\nmodel_context_window = 512000\nwire_api = \"responses\"\ntheme = \"dark\"\nmodel_provider = \"proxy\"\n[model_providers.proxy]\nname = \"proxy\"\nbase_url = \"https://old.example.com\"\n",
     )
     .unwrap();
 
-    let provider = ProviderInfo {
-        name: "official".to_string(),
-        display_name: "Official".to_string(),
-        description: String::new(),
-        agent: "codex".to_string(),
-        settings: ProviderSettings::Codex(CodexProviderConfig::default()),
-    };
+    let provider = load_codex_provider(&paths, "official");
     write_codex_snapshot(
         temp.path(),
         "official",
@@ -217,7 +236,10 @@ fn provider_switch_clears_codex_model_provider_for_official() {
 
     apply_provider(&paths, &provider).unwrap();
     let content = fs::read_to_string(codex_dir.join("config.toml")).unwrap();
-    assert!(content.contains("model = \"gpt-5.4\""));
+    assert!(!content.contains("model = "));
+    assert!(!content.contains("model_context_window = "));
+    assert!(!content.contains("wire_api = "));
+    assert!(content.contains("theme = \"dark\""));
     assert!(!content.contains("model_provider = "));
     assert!(content.contains("[model_providers.proxy]"));
 }
@@ -362,6 +384,10 @@ fn provider_switch_rolls_back_codex_auth_when_config_write_fails() {
         settings: ProviderSettings::Codex(CodexProviderConfig {
             api_key: Some("sk-new".to_string()),
             base_url: Some("https://example.com".to_string()),
+            extra_config: BTreeMap::from([(
+                "model".to_string(),
+                toml::Value::String("gpt-5.5".to_string()),
+            )]),
         }),
     };
 
@@ -434,7 +460,7 @@ fn load_providers_parses_structured_codex_settings() {
     fs::create_dir_all(&providers_dir).unwrap();
     fs::write(
         providers_dir.join("codex.toml"),
-        "[proxy]\ndisplay_name = \"Proxy\"\ndescription = \"desc\"\napi_key = \"sk-test\"\nbase_url = \"https://example.com\"\n",
+        "[proxy]\ndisplay_name = \"Proxy\"\ndescription = \"desc\"\napi_key = \"sk-test\"\nbase_url = \"https://example.com\"\nmodel = \"MiniMax-M3\"\nmodel_context_window = 512000\nwire_api = \"responses\"\n",
     )
     .unwrap();
 
@@ -445,6 +471,18 @@ fn load_providers_parses_structured_codex_settings() {
     };
     assert_eq!(config.api_key.as_deref(), Some("sk-test"));
     assert_eq!(config.base_url.as_deref(), Some("https://example.com"));
+    assert_eq!(
+        config.extra_config.get("model"),
+        Some(&toml::Value::String("MiniMax-M3".to_string()))
+    );
+    assert_eq!(
+        config.extra_config.get("model_context_window"),
+        Some(&toml::Value::Integer(512_000))
+    );
+    assert_eq!(
+        config.extra_config.get("wire_api"),
+        Some(&toml::Value::String("responses".to_string()))
+    );
 }
 
 #[test]

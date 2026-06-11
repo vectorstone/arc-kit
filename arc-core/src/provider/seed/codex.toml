@@ -8,6 +8,8 @@
 #   description   简要描述
 #   base_url      API 地址（proxy 必填）
 #   api_key       OpenAI API Key（proxy 必填）
+#   其他顶层字段  会透传到 ~/.codex/config.toml
+#                例如 model / model_context_window / wire_api
 #
 # 说明：
 #   仅有 display_name / description 的 profile 视为 auth-only 登录态。
@@ -26,3 +28,5 @@ description = "OpenAI 官方订阅"
 # description = "通过中转站访问 OpenAI API"
 # base_url = "https://your-proxy.example.com"
 # api_key = "sk-xxx"
+# model = "your-model"
+# model_context_window = 512000
